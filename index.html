@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Build an Atom: From Atom to Ion</title>
+  <style>
+    * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { background: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
+    .card { background: #1e293b; border-radius: 16px; padding: 28px; width: 100%; max-width: 580px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid #334155; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .tier-badge { background: #3b82f6; color: #fff; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; }
+    .score-badge { background: #10b981; color: #fff; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; }
+    .progress-bar { width: 100%; background: #334155; height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 20px; }
+    .progress-fill { height: 100%; background: #3b82f6; width: 0%; transition: width 0.3s ease; }
+    .question-box { background: #0f172a; border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid #334155; }
+    .input-group { margin-bottom: 14px; }
+    label { display: block; margin-bottom: 6px; font-size: 0.9rem; color: #94a3b8; }
+    input { width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid #475569; background: #1e293b; color: #fff; font-size: 1rem; }
+    input:focus { outline: none; border-color: #3b82f6; }
+    button { width: 100%; padding: 12px; border: none; border-radius: 8px; background: #2563eb; color: #fff; font-weight: 600; font-size: 1rem; cursor: pointer; transition: background 0.2s; }
+    button:hover { background: #1d4ed8; }
+    .feedback { margin-top: 16px; padding: 12px; border-radius: 8px; font-weight: 500; display: none; text-align: center; }
+    .feedback.correct { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid #059669; }
+    .feedback.incorrect { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid #dc2626; }
+    .next-btn { background: #059669; display: none; margin-top: 12px; }
+    .next-btn:hover { background: #047857; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <div class="header">
+    <span class="tier-badge" id="tierLabel">Level 1 of 6</span>
+    <span class="score-badge" id="scoreLabel">Score: 0</span>
+  </div>
+  <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+
+  <div class="question-box">
+    <h3 id="questionTitle" style="margin-top:0;">Question</h3>
+    <p id="questionPrompt" style="color: #cbd5e1; font-size: 1.05rem;"></p>
+  </div>
+
+  <div id="inputsContainer"></div>
+
+  <button id="submitBtn" onclick="checkAnswer()">Submit Answer</button>
+  <button id="nextBtn" class="next-btn" onclick="nextQuestion()">Next Challenge</button>
+  <div id="feedback" class="feedback"></div>
+</div>
+
+<script>
+  const questions = [
+    { tier: "Level 1 – Identify Element", prompt: "An atom has 11 protons. What is the element?", inputs: [{ label: "Element Name", key: "element", answer: "sodium" }] },
+    { tier: "Level 2 – Determine Electrons", prompt: "An atom has 12 protons and is neutral. How many electrons does it have?", inputs: [{ label: "Electrons", key: "electrons", answer: "12" }] },
+    { tier: "Level 3 – Forming Ions", prompt: "A sodium atom has 11 protons and loses 1 electron. What is its charge?", inputs: [{ label: "Charge (e.g. +1 or -1)", key: "charge", answer: "+1" }] },
+    { tier: "Level 4 – Gain Electrons", prompt: "A chlorine atom has 17 protons and gains 1 electron. How many electrons does it now have and what is its charge?", inputs: [{ label: "Electrons", key: "electrons", answer: "18" }, { label: "Charge", key: "charge", answer: "-1" }] },
+    { tier: "Level 5 – Mystery Ion", prompt: "I have 20 protons and 18 electrons. Who am I?", inputs: [{ label: "Element", key: "element", answer: "calcium" }, { label: "Charge", key: "charge", answer: "+2" }, { label: "Ion Symbol (e.g., Ca2+)", key: "ion", answer: "ca2+" }] },
+    { tier: "Level 6 – Challenge Round", prompt: "An ion X²⁻ has 18 electrons. Determine its properties:", inputs: [{ label: "Number of Protons", key: "protons", answer: "16" }, { label: "Element Name", key: "element", answer: "sulfur" }] }
+  ];
+
+  let currentIdx = 0;
+  let score = 0;
+
+  function loadQuestion() {
+    const q = questions[currentIdx];
+    document.getElementById("tierLabel").innerText = `Tier ${currentIdx + 1} of ${questions.length}`;
+    document.getElementById("questionTitle").innerText = q.tier;
+    document.getElementById("questionPrompt").innerText = q.prompt;
+    document.getElementById("progressFill").style.width = `${((currentIdx) / questions.length) * 100}%`;
+    document.getElementById("feedback").style.display = "none";
+    document.getElementById("nextBtn").style.display = "none";
+    document.getElementById("submitBtn").style.display = "block";
+
+    const container = document.getElementById("inputsContainer");
+    container.innerHTML = "";
+    q.inputs.forEach((inp, i) => {
+      container.innerHTML += `
+        <div class="input-group">
+          <label>${inp.label}:</label>
+          <input type="text" id="input_${i}" placeholder="Type answer here..." autocomplete="off">
+        </div>`;
+    });
+  }
+
+  function checkAnswer() {
+    const q = questions[currentIdx];
+    let correct = true;
+
+    q.inputs.forEach((inp, i) => {
+      const userVal = document.getElementById(`input_${i}`).value.trim().toLowerCase().replace(/\s+/g, '');
+      const expected = inp.answer.toLowerCase().replace(/\s+/g, '');
+      if (userVal !== expected) correct = false;
+    });
+
+    const fb = document.getElementById("feedback");
+    fb.style.display = "block";
+
+    if (correct) {
+      score += 10;
+      document.getElementById("scoreLabel").innerText = `Score: ${score}`;
+      fb.className = "feedback correct";
+      fb.innerText = "Correct! Great job!";
+      document.getElementById("submitBtn").style.display = "none";
+      document.getElementById("nextBtn").style.display = "block";
+    } else {
+      fb.className = "feedback incorrect";
+      fb.innerText = "Incorrect. Check your calculations and try again!";
+    }
+  }
+
+  function nextQuestion() {
+    currentIdx++;
+    if (currentIdx < questions.length) {
+      loadQuestion();
+    } else {
+      document.getElementById("progressFill").style.width = "100%";
+      document.querySelector(".card").innerHTML = `
+        <h2 style="text-align:center; color:#10b981;">🎉 Game Complete!</h2>
+        <p style="text-align:center; font-size:1.2rem;">Final Score: <strong>${score} / ${questions.length * 10}</strong></p>
+        <button onclick="location.reload()">Play Again</button>
+      `;
+    }
+  }
+
+  loadQuestion();
+</script>
+</body>
+</html>
